@@ -22,8 +22,10 @@ jobs:
         include:
           - os: windows-latest
             artifact: FlyKrewDownloader-Windows
+            asset_path: dist/FlyKrewDownloader-Windows.exe
           - os: macos-latest
             artifact: FlyKrewDownloader-macOS
+            asset_path: dist/FlyKrewDownloader-macOS.dmg
 
     runs-on: ${{ matrix.os }}
 
@@ -49,7 +51,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}.zip
+          path: ${{ matrix.asset_path }}
 
   release:
     needs: build
@@ -71,15 +73,14 @@ jobs:
 
             | OS | Download |
             |----|----------|
-            | **Windows** | [FlyKrewDownloader-Windows.zip](https://github.com/Drew-2K/FlyKrewDownloader/releases/download/${{ github.ref_name }}/FlyKrewDownloader-Windows.zip) |
-            | **macOS** | [FlyKrewDownloader-macOS.zip](https://github.com/Drew-2K/FlyKrewDownloader/releases/download/${{ github.ref_name }}/FlyKrewDownloader-macOS.zip) |
+            | **Windows** | [FlyKrewDownloader-Windows.exe](https://github.com/Drew-2K/FlyKrewDownloader/releases/download/${{ github.ref_name }}/FlyKrewDownloader-Windows.exe) |
+            | **macOS** | [FlyKrewDownloader-macOS.dmg](https://github.com/Drew-2K/FlyKrewDownloader/releases/download/${{ github.ref_name }}/FlyKrewDownloader-macOS.dmg) |
 
             ### How to use
-            1. Download the ZIP for your OS
-            2. Extract it
-            3. **Windows:** Double-click `FlyKrewDownloader.exe`
-            4. **macOS:** Double-click `FlyKrewDownloader`, then right-click → Open if Gatekeeper blocks it
-            5. Get Groovy 🕺
+            1. Download the file for your OS
+            2. **Windows:** Run `FlyKrewDownloader-Windows.exe`
+            3. **macOS:** Open `FlyKrewDownloader-macOS.dmg`, then drag `FlyKrewDownloader.app` to Applications (or run it from the mounted disk)
+            4. Get Groovy 🕺
           files: |
-            artifacts/FlyKrewDownloader-Windows/FlyKrewDownloader-Windows.zip
-            artifacts/FlyKrewDownloader-macOS/FlyKrewDownloader-macOS.zip
+            artifacts/FlyKrewDownloader-Windows/FlyKrewDownloader-Windows.exe
+            artifacts/FlyKrewDownloader-macOS/FlyKrewDownloader-macOS.dmg

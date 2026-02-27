@@ -68,6 +68,7 @@
 			let pollInterval = null;
 			let activeJobId = null;
 			let hasTriggeredDownload = false;
+			let heartbeatInterval = null;
 
 			const URL_PATTERN = /^(https?:\/\/soundcloud\.com\/[\w-]+\/sets\/[\w-]+|https?:\/\/on\.soundcloud\.com\/[\w-]+)/;
 
@@ -151,6 +152,27 @@
 					setHidden('track-lists', true);
 				}
 			}
+
+			async function pingServer() {
+				try {
+					await fetch('/api/ping', { cache: 'no-store' });
+				} catch (e) {
+					setError('Fly Krew Downloader is not running. Re-open the app to download again.');
+				}
+			}
+
+			function startHeartbeat() {
+				if (heartbeatInterval) return;
+				// Keep the app alive while the page is open/visible.
+				heartbeatInterval = setInterval(pingServer, 60_000);
+				pingServer();
+			}
+
+			function stopHeartbeat() {
+				if (!heartbeatInterval) return;
+				clearInterval(heartbeatInterval);
+				heartbeatInterval = null;
+			}
 			setError('');
 
 				const completed = status.completed_tracks ?? 0;
@@ -224,8 +246,25 @@
 
 			// Poll for status every 2 seconds while downloading
 			async function pollStatus(jobId) {
-				const response = await fetch(`/api/status/${jobId}`);
-				const status = await response.json();
+				let response;
+				let status;
+				try {
+					response = await fetch(`/api/status/${jobId}`);
+					status = await response.json();
+				} catch (e) {
+					// Server likely stopped (auto-exit) or was closed.
+					if (pollInterval) {
+						clearInterval(pollInterval);
+						pollInterval = null;
+					}
+					setButtonDisabled('download-btn', false);
+					setHidden('cancel-btn', true);
+					setHidden('progress', true);
+					setHidden('download', true);
+					setHidden('track-lists', true);
+					setError('Fly Krew Downloader is not running. Re-open the app to download again.');
+					return;
+				}
 
 				updateProgressUI(status);
 
@@ -296,7 +335,7 @@
 					pollInterval = setInterval(() => pollStatus(job_id), 2000);
 					pollStatus(job_id);
 				} catch (e) {
-					setError('Network error. Is the server running?');
+					setError('Fly Krew Downloader is not running. Re-open the app and try again.');
 					setButtonDisabled('download-btn', false);
 					setHidden('cancel-btn', true);
 				}
@@ -332,6 +371,13 @@
 				hasTriggeredDownload = false;
 				startDownload();
 			});
+
+			// Heartbeat only when the tab is visible.
+			document.addEventListener('visibilitychange', () => {
+				if (document.visibilityState === 'visible') startHeartbeat();
+				else stopHeartbeat();
+			});
+			startHeartbeat();
 
 			document.getElementById('url-input').addEventListener('keydown', (e) => {
 				if (e.key === 'Enter') startDownload();

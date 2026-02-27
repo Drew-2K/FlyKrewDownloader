@@ -82,6 +82,32 @@ class Job:
 jobs: dict[str, Job] = {}
 
 
+# Updated whenever the user interacts with the app (downloads, status polls, heartbeat, etc.).
+LAST_ACTIVITY: datetime = datetime.now()
+
+
+def touch_activity() -> None:
+	global LAST_ACTIVITY
+	LAST_ACTIVITY = datetime.now()
+
+
+def get_last_activity() -> datetime:
+	return LAST_ACTIVITY
+
+
+def has_active_jobs() -> bool:
+	# Consider these as "active" work.
+	active = {"pending", "downloading", "zipping"}
+	return any(j.status in active for j in jobs.values())
+
+
+@app.get("/api/ping")
+async def ping():
+	"""Heartbeat endpoint used by the UI to keep the app alive while open."""
+	touch_activity()
+	return {"ok": True}
+
+
 app = FastAPI()
 
 
@@ -153,6 +179,7 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
 		raise HTTPException(status_code=400, detail="Invalid SoundCloud playlist URL")
 
 	job_id = str(uuid.uuid4())
+	touch_activity()
 	job = Job(id=job_id, url=url)
 	jobs[job_id] = job
 
@@ -186,6 +213,7 @@ async def process_download(job_id: str):
 	job_dir.mkdir(parents=True, exist_ok=True)
 
 	def progress_callback(current_track, total_tracks, track_info):
+		touch_activity()
 		job.current_track = current_track
 		job.total_tracks = total_tracks
 		if track_info is not None:
@@ -202,9 +230,11 @@ async def process_download(job_id: str):
 		job.errors = result.errors
 
 		job.status = "zipping"
+		touch_activity()
 		job.current_track = None
 		zip_path = create_playlist_zip(result.tracks, job.playlist_title or "playlist", job_dir)
 		job.zip_path = zip_path
+		touch_activity()
 
 		if job.cancel_requested:
 			job.status = "cancelled"
