@@ -71,16 +71,15 @@ jobs:
 
             | OS | Download |
             |----|----------|
-            | **Windows** | `FlyKrewDownloader-Windows.zip` |
-            | **macOS** | `FlyKrewDownloader-macOS.zip` |
+            | **Windows** | [FlyKrewDownloader-Windows.zip](https://github.com/Drew-2K/FlyKrewDownloader/releases/download/${{ github.ref_name }}/FlyKrewDownloader-Windows.zip) |
+            | **macOS** | [FlyKrewDownloader-macOS.zip](https://github.com/Drew-2K/FlyKrewDownloader/releases/download/${{ github.ref_name }}/FlyKrewDownloader-macOS.zip) |
 
             ### How to use
             1. Download the ZIP for your OS
             2. Extract it
             3. **Windows:** Double-click `FlyKrewDownloader.exe`
             4. **macOS:** Double-click `FlyKrewDownloader`, then right-click → Open if Gatekeeper blocks it
-            5. Your browser opens → paste a SoundCloud playlist URL → click Download
-            6. Close the window when you're done
+            5. Get Groovy 🕺
           files: |
             artifacts/FlyKrewDownloader-Windows/FlyKrewDownloader-Windows.zip
             artifacts/FlyKrewDownloader-macOS/FlyKrewDownloader-macOS.zip
