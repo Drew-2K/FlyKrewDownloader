@@ -1,0 +1,86 @@
+# Builds standalone apps for Windows and macOS, then attaches them to a GitHub Release.
+#
+# Trigger: push a version tag → both builds run → ZIPs appear on the Release page.
+#   git tag v1.0.0
+#   git push origin v1.0.0
+
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"          # triggers on v1.0.0, v2.1, etc.
+  workflow_dispatch:   # also allows manual trigger from GitHub UI
+
+permissions:
+  contents: write      # needed to create releases and upload assets
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: FlyKrewDownloader-Windows
+          - os: macos-latest
+            artifact: FlyKrewDownloader-macOS
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download ffmpeg
+        run: python setup_bins.py
+
+      - name: Build standalone app
+        run: python build.py
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Fly Krew Downloader ${{ github.ref_name }}"
+          body: |
+            ## Download
+
+            | OS | Download |
+            |----|----------|
+            | **Windows** | `FlyKrewDownloader-Windows.zip` |
+            | **macOS** | `FlyKrewDownloader-macOS.zip` |
+
+            ### How to use
+            1. Download the ZIP for your OS
+            2. Extract it
+            3. **Windows:** Double-click `FlyKrewDownloader.exe`
+            4. **macOS:** Double-click `FlyKrewDownloader`, then right-click → Open if Gatekeeper blocks it
+            5. Your browser opens → paste a SoundCloud playlist URL → click Download
+            6. Close the window when you're done
+          files: |
+            artifacts/FlyKrewDownloader-Windows/FlyKrewDownloader-Windows.zip
+            artifacts/FlyKrewDownloader-macOS/FlyKrewDownloader-macOS.zip

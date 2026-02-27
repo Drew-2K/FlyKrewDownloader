@@ -1,0 +1,22 @@
+# Binaries (user downloads separately)
+bin/ffmpeg
+bin/ffmpeg.exe
+
+# Downloaded files
+downloads/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

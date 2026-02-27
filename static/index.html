@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Fly Krew Downloader</title>
+		<link rel="stylesheet" href="/static/style.css" />
+	</head>
+	<body>
+		<div id="animation-container" class="animation-container">
+			<div id="starfield" class="starfield"></div>
+			<div id="cursor-trail" class="cursor-trail"></div>
+		</div>
+		<main class="page">
+			<section class="card">
+				<header class="header">
+          <h1>FLY KREW DOWNLOADER</h1>
+          <p class="subtitle">Rip it baby 🪩</p>
+				<div class="form">
+					<label class="label" for="url-input">SoundCloud playlist URL</label>
+					<input
+						id="url-input"
+						class="input"
+						type="text"
+						placeholder="https://soundcloud.com/username/sets/playlist"
+						autocomplete="off"
+						inputmode="url"
+					/>
+					<div class="actions">
+						<button id="download-btn" class="button" type="button">Download</button>
+						<button id="cancel-btn" class="button button-secondary hidden" type="button">Cancel</button>
+						<button id="retry-btn" class="button button-secondary hidden" type="button">Retry</button>
+					</div>
+					<p id="error" class="error hidden"></p>
+				</div>
+
+				<div id="progress" class="progress hidden">
+					<div class="progress-top">
+						<div class="progress-bar" id="progress-bar">░░░░░░░░░░ 0/0 tracks</div>
+						<div class="status" id="status-text">Waiting…</div>
+					</div>
+
+					<div class="current">
+						<div class="section-title">Current track</div>
+						<div id="current-track" class="current-track">—</div>
+					</div>
+				</div>
+
+				<div class="lists hidden" id="track-lists">
+					<div class="list" id="completed-list-container">
+						<div class="section-title">Completed</div>
+						<ul id="completed-list" class="ul"></ul>
+					</div>
+					<div class="list hidden" id="failed-list-container">
+						<div class="section-title">Failed</div>
+						<ul id="failed-list" class="ul"></ul>
+					</div>
+				</div>
+
+				<div id="download" class="download hidden">
+				<div class="success-icon">✓</div>
+				<div id="success-text" class="success">LETS GET <span class="groovy-text">GROOVY</span> BABY 🕺</div>
+				</div>
+			</section>
+		</main>
+
+		<script>
+			let pollInterval = null;
+			let activeJobId = null;
+			let hasTriggeredDownload = false;
+
+			const URL_PATTERN = /^(https?:\/\/soundcloud\.com\/[\w-]+\/sets\/[\w-]+|https?:\/\/on\.soundcloud\.com\/[\w-]+)/;
+
+			function setError(message) {
+				const el = document.getElementById('error');
+				if (!message) {
+					el.textContent = '';
+					el.classList.add('hidden');
+					return;
+				}
+				el.textContent = message;
+				el.classList.remove('hidden');
+			}
+
+			function setHidden(id, hidden) {
+				const el = document.getElementById(id);
+				el.classList.toggle('hidden', Boolean(hidden));
+			}
+
+			function setButtonDisabled(id, disabled) {
+				const el = document.getElementById(id);
+				el.disabled = Boolean(disabled);
+			}
+
+			function escapeHtml(str) {
+				return String(str)
+					.replace(/&/g, '&amp;')
+					.replace(/</g, '&lt;')
+					.replace(/>/g, '&gt;')
+					.replace(/"/g, '&quot;')
+					.replace(/'/g, '&#039;');
+			}
+
+			function progressBarString(completed, total) {
+				const segments = 10;
+				if (!total || total <= 0) {
+					return '░'.repeat(segments) + ' 0/0 tracks';
+				}
+				const ratio = Math.max(0, Math.min(1, completed / total));
+				const filled = Math.round(ratio * segments);
+				return '█'.repeat(filled) + '░'.repeat(segments - filled) + ` ${completed}/${total} tracks`;
+			}
+
+			function bytesToHuman(bytes) {
+				if (!bytes || bytes <= 0) return '';
+				const units = ['B', 'KB', 'MB', 'GB'];
+				let value = bytes;
+				let unit = 0;
+				while (value >= 1024 && unit < units.length - 1) {
+					value /= 1024;
+					unit += 1;
+				}
+				const decimals = unit === 0 ? 0 : 1;
+				return `${value.toFixed(decimals)} ${units[unit]}`;
+			}
+
+			function parseFilename(contentDisposition) {
+				if (!contentDisposition) return '';
+				const match = /filename\*?=(?:UTF-8''|\")?([^;\"\n]+)\"?/i.exec(contentDisposition);
+				if (!match) return '';
+				try {
+					return decodeURIComponent(match[1]);
+				} catch {
+					return match[1];
+				}
+			}
+
+			function updateProgressUI(status) {
+			const isTerminal = status.status === 'complete' || status.status === 'cancelled' || status.status === 'error';
+			if (isTerminal && status.zip_ready) {
+				setHidden('progress', true);
+				setHidden('download', false);
+				setHidden('track-lists', false); // Always show track lists when complete
+			} else {
+				setHidden('progress', false);
+				setHidden('download', true);
+				// Show track lists when downloading or zipping
+				if (status.status === 'downloading' || status.status === 'zipping') {
+					setHidden('track-lists', false);
+				} else {
+					setHidden('track-lists', true);
+				}
+			}
+			setError('');
+
+				const completed = status.completed_tracks ?? 0;
+				const total = status.total_tracks ?? 0;
+				const current = status.current_track ?? '—';
+
+				document.getElementById('progress-bar').textContent = progressBarString(completed, total);
+				
+				const currentTrackSection = document.querySelector('.current');
+				if (status.status === 'zipping' || status.status === 'complete' || status.status === 'cancelled' || !current || current === '\u2014') {
+					currentTrackSection.style.display = 'none';
+				} else {
+					currentTrackSection.style.display = 'block';
+					document.getElementById('current-track').textContent = current;
+				}
+				
+				document.getElementById('status-text').textContent = status.status || 'pending';
+
+				const completedList = document.getElementById('completed-list');
+			const completedTracks = status.completed_tracks_info || [];
+			completedList.innerHTML = '';
+			for (const track of completedTracks) {
+				const li = document.createElement('li');
+				li.className = 'li';
+				li.textContent = `✓ ${track}`;
+				completedList.appendChild(li);
+			}
+
+				const failedList = document.getElementById('failed-list');
+        const failedContainer = document.getElementById('failed-list-container');
+        const trackLists = document.getElementById('track-lists');
+        failedList.innerHTML = '';
+        const errors = Array.isArray(status.errors) ? status.errors : [];
+        
+        if (errors.length > 0) {
+          failedContainer.classList.remove('hidden');
+          trackLists.classList.remove('centered');
+          for (const err of errors) {
+            const index = err.index ?? 0;
+            const title = err.title ?? '';
+            const message = err.error ?? 'Unknown error';
+            const li = document.createElement('li');
+            li.className = 'li li-error';
+            li.innerHTML = `${escapeHtml(index ? `#${index} ` : '')}${escapeHtml(title)} — ${escapeHtml(message)}`;
+            failedList.appendChild(li);
+          }
+        } else {
+          failedContainer.classList.add('hidden');
+          trackLists.classList.add('centered');
+        }
+
+				const retryBtn = document.getElementById('retry-btn');
+				const isCompleteFailure = status.status === 'error' && completed === 0;
+				retryBtn.classList.toggle('hidden', !isCompleteFailure);
+			}
+
+			function triggerZipDownload(jobId) {
+				const url = `/api/result/${jobId}`;
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = '';
+				a.style.display = 'none';
+				document.body.appendChild(a);
+				a.click();
+				a.remove();
+			}
+
+			async function showSuccessMessage(jobId, status) {
+				setHidden('download', false);
+			}
+
+			// Poll for status every 2 seconds while downloading
+			async function pollStatus(jobId) {
+				const response = await fetch(`/api/status/${jobId}`);
+				const status = await response.json();
+
+				updateProgressUI(status);
+
+				// Toggle card pulse based on download status
+				const card = document.querySelector('.card');
+				if (status.status === 'downloading' || status.status === 'zipping') {
+					card.classList.add('card-pulse');
+				} else {
+					card.classList.remove('card-pulse');
+				}
+
+				if (status.status === 'complete' || status.status === 'cancelled' || status.status === 'error') {
+					clearInterval(pollInterval);
+					pollInterval = null;
+					setButtonDisabled('download-btn', false);
+					setHidden('cancel-btn', true);
+
+					if (status.zip_ready) {
+						if (!hasTriggeredDownload) {
+							hasTriggeredDownload = true;
+							triggerZipDownload(jobId);
+						}
+						showSuccessMessage(jobId, status);
+					}
+
+					if (status.status === 'error' && !status.zip_ready) {
+						setError('Download failed. You can retry.');
+					}
+				}
+			}
+
+			// Start download
+			async function startDownload() {
+				const url = document.getElementById('url-input').value.trim();
+				setError('');
+				setHidden('download', true);
+				setHidden('cancel-btn', true);
+				hasTriggeredDownload = false;
+
+				if (!URL_PATTERN.test(url)) {
+					setError('Please enter a valid SoundCloud playlist URL.');
+					return;
+				}
+
+				setHidden('progress', true);
+				setButtonDisabled('download-btn', true);
+				document.getElementById('retry-btn').classList.add('hidden');
+
+				try {
+					const response = await fetch('/api/download', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ url }),
+					});
+
+					if (!response.ok) {
+						const body = await response.json().catch(() => ({}));
+						const detail = body && body.detail ? body.detail : 'Request failed.';
+						setError(String(detail));
+						setButtonDisabled('download-btn', false);
+						return;
+					}
+
+					const { job_id } = await response.json();
+					activeJobId = job_id;
+					setHidden('progress', false);
+					setHidden('cancel-btn', false);
+					pollInterval = setInterval(() => pollStatus(job_id), 2000);
+					pollStatus(job_id);
+				} catch (e) {
+					setError('Network error. Is the server running?');
+					setButtonDisabled('download-btn', false);
+					setHidden('cancel-btn', true);
+				}
+			}
+
+			async function cancelDownload() {
+				if (!activeJobId) return;
+				setError('');
+				try {
+					const response = await fetch(`/api/job/${activeJobId}`, { method: 'DELETE' });
+					if (!response.ok) {
+						const body = await response.json().catch(() => ({}));
+						const detail = body && body.detail ? body.detail : 'Cancel failed.';
+						setError(String(detail));
+						return;
+					}
+					document.getElementById('status-text').textContent = 'cancel_requested';
+					setHidden('cancel-btn', true);
+				} catch {
+					setError('Network error while cancelling.');
+				}
+			}
+
+			document.getElementById('download-btn').addEventListener('click', startDownload);
+			document.getElementById('cancel-btn').addEventListener('click', cancelDownload);
+			document.getElementById('retry-btn').addEventListener('click', () => {
+				if (pollInterval) {
+					clearInterval(pollInterval);
+					pollInterval = null;
+				}
+				activeJobId = null;
+				setHidden('cancel-btn', true);
+				hasTriggeredDownload = false;
+				startDownload();
+			});
+
+			document.getElementById('url-input').addEventListener('keydown', (e) => {
+				if (e.key === 'Enter') startDownload();
+			});
+
+			// ========================================
+			// Background Animations
+			// ========================================
+
+			const animationContainer = document.getElementById('animation-container');
+			const isMobile = () => window.innerWidth < 560;
+
+			// Flying Planes
+			function spawnPlane() {
+				const planes = ['✈️', '🛩️', '🪂'];
+				const plane = document.createElement('div');
+				plane.className = 'plane';
+				plane.textContent = planes[Math.floor(Math.random() * planes.length)];
+				
+				const topPercent = 10 + Math.random() * 70;
+				plane.style.top = topPercent + '%';
+				plane.style.left = '-100px';
+				
+				const isDiagonal = Math.random() < 0.2;
+				const duration = 8000 + Math.random() * 4000;
+				
+				animationContainer.appendChild(plane);
+				
+				const noteInterval = setInterval(() => {
+					const rect = plane.getBoundingClientRect();
+					if (rect.left > window.innerWidth) {
+						clearInterval(noteInterval);
+						return;
+					}
+					
+					const note = document.createElement('div');
+					note.className = 'musical-note';
+					note.textContent = ['♪', '♫'][Math.floor(Math.random() * 2)];
+					note.style.left = rect.left + rect.width / 2 + 'px';
+					note.style.top = rect.top + rect.height / 2 + 'px';
+					animationContainer.appendChild(note);
+					
+					setTimeout(() => note.remove(), 2000);
+				}, 500);
+				
+				const startTime = Date.now();
+				const animate = () => {
+					const elapsed = Date.now() - startTime;
+					const progress = elapsed / duration;
+					
+					if (progress >= 1) {
+						clearInterval(noteInterval);
+						plane.remove();
+						return;
+					}
+					
+					const x = -100 + (window.innerWidth + 200) * progress;
+					const y = isDiagonal ? topPercent + (20 * progress) : topPercent;
+					
+					plane.style.left = x + 'px';
+					plane.style.top = y + '%';
+					
+					requestAnimationFrame(animate);
+				};
+				
+				requestAnimationFrame(animate);
+			}
+
+			function planeSpawnLoop() {
+				const scheduleNext = () => {
+					const isActive = pollInterval !== null;
+					const baseInterval = isActive ? 5000 : 10000;
+					const variance = isActive ? 5000 : 10000;
+					const mobileMultiplier = isMobile() ? 1.5 : 1;
+					
+					const interval = (baseInterval + Math.random() * variance) * mobileMultiplier;
+					
+					setTimeout(() => {
+						spawnPlane();
+						scheduleNext();
+					}, interval);
+				};
+				
+				scheduleNext();
+			}
+
+			// Color Orbs
+			function spawnOrb() {
+				const colors = [
+					'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+					'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+					'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+					'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+					'linear-gradient(135deg, #fa709a 0%, #fee140 100%)'
+				];
+				
+				const orb = document.createElement('div');
+				orb.className = 'color-orb';
+				
+				const size = (40 + Math.random() * 60) * (isMobile() ? 0.6 : 1);
+				orb.style.width = size + 'px';
+				orb.style.height = size + 'px';
+				orb.style.left = 5 + Math.random() * 90 + '%';
+				orb.style.top = 10 + Math.random() * 80 + '%';
+				orb.style.background = colors[Math.floor(Math.random() * colors.length)];
+				
+				animationContainer.appendChild(orb);
+				
+				setTimeout(() => orb.remove(), 3600);
+			}
+
+			function orbSpawnLoop() {
+				const scheduleNext = () => {
+					const interval = (8000 + Math.random() * 7000) * (isMobile() ? 1.3 : 1);
+					
+					setTimeout(() => {
+						spawnOrb();
+						scheduleNext();
+					}, interval);
+				};
+				
+				scheduleNext();
+			}
+
+			// Cursor Trail
+			if (!isMobile()) {
+				const cursorTrail = document.getElementById('cursor-trail');
+				let lastTrailTime = 0;
+				
+				document.addEventListener('mousemove', (e) => {
+					const now = Date.now();
+					if (now - lastTrailTime < 100) return;
+					lastTrailTime = now;
+					
+					const notes = ['♪', '♫', '♬'];
+					const trail = document.createElement('div');
+					trail.className = 'trail-note';
+					trail.textContent = notes[Math.floor(Math.random() * notes.length)];
+					trail.style.left = e.pageX + 'px';
+					trail.style.top = e.pageY + 'px';
+					
+					cursorTrail.appendChild(trail);
+					
+					setTimeout(() => trail.remove(), 900);
+				});
+			}
+
+			// Starfield Particles
+			function spawnStar() {
+				const starfield = document.getElementById('starfield');
+				const star = document.createElement('div');
+				star.className = 'star';
+				
+				const size = 1 + Math.random() * 2;
+				star.style.width = size + 'px';
+				star.style.height = size + 'px';
+				star.style.left = Math.random() * 100 + '%';
+				star.style.top = Math.random() * 100 + '%';
+				star.style.animationDuration = (20 + Math.random() * 20) + 's';
+				star.style.opacity = 0.3 + Math.random() * 0.4;
+				
+				starfield.appendChild(star);
+			}
+
+			function initStarfield() {
+				const starCount = isMobile() ? 30 : 50;
+				for (let i = 0; i < starCount; i++) {
+					spawnStar();
+				}
+			}
+
+			// Start animation loops
+			initStarfield();
+			planeSpawnLoop();
+			orbSpawnLoop();
+		</script>
+	</body>
+</html>
