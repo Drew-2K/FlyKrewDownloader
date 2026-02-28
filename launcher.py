@@ -9,6 +9,7 @@ import os
 import sys
 import threading
 import time
+import urllib.request
 import webbrowser
 from datetime import datetime, timedelta
 
@@ -45,8 +46,42 @@ def _ensure_std_streams() -> None:
 
 def open_browser() -> None:
     """Wait for the server to be ready, then open the default browser."""
-    time.sleep(1.5)
+    # Poll for readiness so we don't open a dead tab on slow startup.
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        if _ping_server(timeout=1.0):
+            break
+        time.sleep(0.25)
     webbrowser.open(URL)
+
+
+def _ping_server(timeout: float = 1.0) -> bool:
+    try:
+        with urllib.request.urlopen(f"{URL}/api/ping", timeout=timeout) as resp:
+            status = getattr(resp, "status", 200)
+            return 200 <= int(status) < 300
+    except Exception:
+        return False
+
+
+def _show_startup_error(title: str, message: str) -> None:
+    """Show a user-visible error in no-console builds."""
+    # Prefer a native Windows message box (no extra deps).
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(None, message, title, 0x10)  # MB_ICONERROR
+            return
+        except Exception:
+            pass
+
+    # Fallback: best-effort stderr (may be hidden in windowed builds).
+    try:
+        sys.stderr.write(f"{title}: {message}\n")
+        sys.stderr.flush()
+    except Exception:
+        pass
 
 
 def start_watchdog(server: uvicorn.Server) -> None:
@@ -71,15 +106,17 @@ def start_watchdog(server: uvicorn.Server) -> None:
 def main() -> None:
     _ensure_std_streams()
 
+    # If an instance is already running, just open the UI and exit.
+    if _ping_server(timeout=0.8):
+        webbrowser.open(URL)
+        return
+
     print("=" * 50)
     print("  Fly Krew Downloader")
     print(f"  Running at {URL}")
     print("  Close this window to stop the server.")
     print("=" * 50)
     print()
-
-    # Open browser in background thread
-    threading.Thread(target=open_browser, daemon=True).start()
 
     config = uvicorn.Config(
         "app.main:app",
@@ -90,11 +127,29 @@ def main() -> None:
     )
     server = uvicorn.Server(config)
 
+    # Open browser in background thread (after we know we're attempting startup)
+    threading.Thread(target=open_browser, daemon=True).start()
+
     # Auto-exit watchdog
     threading.Thread(target=start_watchdog, args=(server,), daemon=True).start()
 
     try:
         server.run()
+    except OSError as e:
+        # Common case: previous instance is still running and owns the port.
+        winerror = getattr(e, "winerror", None)
+        msg = str(e).lower()
+        if winerror == 10048 or "address already in use" in msg or "only one usage" in msg:
+            if _ping_server(timeout=0.8):
+                webbrowser.open(URL)
+                return
+            _show_startup_error(
+                "Fly Krew Downloader already running",
+                "FlyKrewDownloader is already using port 8000. Close it in Task Manager and try again.",
+            )
+            return
+        _show_startup_error("Fly Krew Downloader failed to start", str(e))
+        return
     except KeyboardInterrupt:
         pass
 
