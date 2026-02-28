@@ -5,6 +5,11 @@ bin/ffmpeg.exe
 # Downloaded files
 downloads/
 
+# PyInstaller
+build/
+dist/
+*.spec
+
 # Python
 __pycache__/
 *.pyc

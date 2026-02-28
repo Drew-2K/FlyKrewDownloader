@@ -5,6 +5,7 @@ Double-click this (or the packaged build) to:
     2. Auto-open the browser
     3. Auto-exit after inactivity (no active downloads)
 """
+import os
 import sys
 import threading
 import time
@@ -21,6 +22,25 @@ WATCHDOG_POLL_SECONDS = 10
 
 
 URL = f"http://{HOST}:{PORT}"
+
+
+def _ensure_std_streams() -> None:
+    """Ensure stdout/stderr are usable in PyInstaller --noconsole builds.
+
+    In windowed/no-console mode on Windows, sys.stdout/sys.stderr can be None,
+    which breaks libraries that probe TTY capabilities (e.g. isatty()).
+    """
+
+    def ensure(stream_name: str) -> None:
+        stream = getattr(sys, stream_name)
+        if stream is None:
+            setattr(sys, stream_name, open(os.devnull, "w", encoding="utf-8", errors="ignore"))
+            return
+        if not hasattr(stream, "isatty"):
+            setattr(sys, stream_name, open(os.devnull, "w", encoding="utf-8", errors="ignore"))
+
+    ensure("stdout")
+    ensure("stderr")
 
 
 def open_browser() -> None:
@@ -49,6 +69,8 @@ def start_watchdog(server: uvicorn.Server) -> None:
 
 
 def main() -> None:
+    _ensure_std_streams()
+
     print("=" * 50)
     print("  Fly Krew Downloader")
     print(f"  Running at {URL}")
@@ -64,6 +86,7 @@ def main() -> None:
         host=HOST,
         port=PORT,
         log_level="warning",
+        use_colors=False,
     )
     server = uvicorn.Server(config)
 

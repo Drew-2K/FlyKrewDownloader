@@ -101,14 +101,14 @@ def has_active_jobs() -> bool:
 	return any(j.status in active for j in jobs.values())
 
 
+app = FastAPI()
+
+
 @app.get("/api/ping")
 async def ping():
 	"""Heartbeat endpoint used by the UI to keep the app alive while open."""
 	touch_activity()
 	return {"ok": True}
-
-
-app = FastAPI()
 
 
 @app.on_event("startup")
