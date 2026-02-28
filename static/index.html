@@ -16,6 +16,7 @@
 				<header class="header">
           <h1>FLY KREW DOWNLOADER</h1>
           <p class="subtitle">Rip it baby 🪩</p>
+				</header>
 				<div class="form">
 					<label class="label" for="url-input">SoundCloud playlist URL</label>
 					<input
@@ -153,28 +154,6 @@
 				}
 			}
 
-			async function pingServer() {
-				try {
-					await fetch('/api/ping', { cache: 'no-store' });
-				} catch (e) {
-					setError('Fly Krew Downloader is not running. Re-open the app to download again.');
-				}
-			}
-
-			function startHeartbeat() {
-				if (heartbeatInterval) return;
-				// Keep the app alive while the page is open/visible.
-				heartbeatInterval = setInterval(pingServer, 60_000);
-				pingServer();
-			}
-
-			function stopHeartbeat() {
-				if (!heartbeatInterval) return;
-				clearInterval(heartbeatInterval);
-				heartbeatInterval = null;
-			}
-			setError('');
-
 				const completed = status.completed_tracks ?? 0;
 				const total = status.total_tracks ?? 0;
 				const current = status.current_track ?? '—';
@@ -228,6 +207,29 @@
 				const isCompleteFailure = status.status === 'error' && completed === 0;
 				retryBtn.classList.toggle('hidden', !isCompleteFailure);
 			}
+
+			async function pingServer() {
+				try {
+					await fetch('/api/ping', { cache: 'no-store' });
+				} catch (e) {
+					setError('Fly Krew Downloader is not running. Re-open the app to download again.');
+				}
+			}
+
+			function startHeartbeat() {
+				if (heartbeatInterval) return;
+				// Keep the app alive while the page is open/visible.
+				heartbeatInterval = setInterval(pingServer, 60_000);
+				pingServer();
+			}
+
+			function stopHeartbeat() {
+				if (!heartbeatInterval) return;
+				clearInterval(heartbeatInterval);
+				heartbeatInterval = null;
+			}
+
+			setError('');
 
 			function triggerZipDownload(jobId) {
 				const url = `/api/result/${jobId}`;
