@@ -1021,8 +1021,8 @@ exe = EXE(
 **GitHub Releases structure:**
 ```
 Release v2.0.0
-├── FlyKrewDownloader-Windows.exe     (direct download, ~90MB)
-├── FlyKrewDownloader-macOS.zip       (contains .app bundle, ~90MB)
+├── FlyKrewDownloader.exe             (direct download, ~90MB)
+├── FlyKrewDownloader.dmg             (contains .app bundle, ~90MB)
 └── README.txt
 ```
 
@@ -1033,7 +1033,7 @@ Release v2.0.0
 ═══════════════════════════════════════════════════════
 
 WINDOWS:
-  1. Download FlyKrewDownloader-Windows.exe
+    1. Download FlyKrewDownloader.exe
   2. Double-click to run
   3. Your browser opens automatically
   4. Paste a SoundCloud playlist URL
@@ -1041,7 +1041,7 @@ WINDOWS:
   6. Find your ZIP in: Downloads > FlyKrewDownloader
 
 macOS:
-  1. Download FlyKrewDownloader-macOS.zip
+    1. Download FlyKrewDownloader.dmg
   2. Unzip it (double-click)
   3. Right-click the app → Open → "Open Anyway"
      (This is normal for apps not from the App Store)

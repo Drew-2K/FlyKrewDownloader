@@ -22,10 +22,10 @@ jobs:
         include:
           - os: windows-latest
             artifact: FlyKrewDownloader-Windows
-            asset_path: dist/FlyKrewDownloader-Windows.exe
+            asset_path: dist/FlyKrewDownloader.exe
           - os: macos-latest
             artifact: FlyKrewDownloader-macOS
-            asset_path: dist/FlyKrewDownloader-macOS.dmg
+            asset_path: dist/FlyKrewDownloader.dmg
 
     runs-on: ${{ matrix.os }}
 
@@ -73,14 +73,14 @@ jobs:
 
             | OS | Download |
             |----|----------|
-            | **Windows** | [FlyKrewDownloader-Windows.exe](https://github.com/Drew-2K/FlyKrewDownloader/releases/download/${{ github.ref_name }}/FlyKrewDownloader-Windows.exe) |
-            | **macOS** | [FlyKrewDownloader-macOS.dmg](https://github.com/Drew-2K/FlyKrewDownloader/releases/download/${{ github.ref_name }}/FlyKrewDownloader-macOS.dmg) |
+            | **Windows** | [FlyKrewDownloader.exe](https://github.com/Drew-2K/FlyKrewDownloader/releases/download/${{ github.ref_name }}/FlyKrewDownloader.exe) |
+            | **macOS** | [FlyKrewDownloader.dmg](https://github.com/Drew-2K/FlyKrewDownloader/releases/download/${{ github.ref_name }}/FlyKrewDownloader.dmg) |
 
             ### How to use
             1. Download the file for your OS
-            2. **Windows:** Run `FlyKrewDownloader-Windows.exe`
-            3. **macOS:** Open `FlyKrewDownloader-macOS.dmg`, then drag `FlyKrewDownloader.app` to Applications (or run it from the mounted disk)
+            2. **Windows:** Run `FlyKrewDownloader.exe`
+            3. **macOS:** Open `FlyKrewDownloader.dmg`, then drag `FlyKrewDownloader.app` to Applications (or run it from the mounted disk)
             4. Get Groovy 🕺
           files: |
-            artifacts/FlyKrewDownloader-Windows/FlyKrewDownloader-Windows.exe
-            artifacts/FlyKrewDownloader-macOS/FlyKrewDownloader-macOS.dmg
+            artifacts/FlyKrewDownloader-Windows/FlyKrewDownloader.exe
+            artifacts/FlyKrewDownloader-macOS/FlyKrewDownloader.dmg

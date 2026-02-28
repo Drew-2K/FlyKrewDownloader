@@ -7,11 +7,11 @@ Download SoundCloud playlists as a ZIP of MP3 files.
 ## For Friends (Plug & Play)
 
 1. Download the ZIP for your OS from Releases:
-   - `FlyKrewDownloader-Windows.exe`
-   - `FlyKrewDownloader-macOS.dmg`
-2. **Windows:** Run `FlyKrewDownloader-Windows.exe`
+   - `FlyKrewDownloader.exe`
+   - `FlyKrewDownloader.dmg`
+2. **Windows:** Run `FlyKrewDownloader.exe`
    - If SmartScreen warns "Unknown publisher", click *More info* → *Run anyway*
-3. **macOS:** Open `FlyKrewDownloader-macOS.dmg`
+3. **macOS:** Open `FlyKrewDownloader.dmg`
    - Drag `FlyKrewDownloader.app` to Applications (recommended)
    - If Gatekeeper blocks it, right-click → *Open* → *Open* to confirm
 4. Your browser opens automatically — paste a playlist URL and click Download
@@ -60,8 +60,8 @@ python build.py
 ```
 
 Produces:
-- `dist/FlyKrewDownloader-Windows.exe` — Windows single-file download
-- `dist/FlyKrewDownloader-macOS.dmg` — macOS disk image containing `FlyKrewDownloader.app`
+- `dist/FlyKrewDownloader.exe` — Windows single-file download
+- `dist/FlyKrewDownloader.dmg` — macOS disk image containing `FlyKrewDownloader.app`
 
 > **Note:** You must build on each target OS separately (PyInstaller cannot
 > cross-compile). Build on Windows for Windows, on a Mac for macOS.

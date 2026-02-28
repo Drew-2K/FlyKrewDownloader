@@ -5,8 +5,8 @@ Run from the repo root:
     python build.py
 
 Produces:
-    Windows: dist/FlyKrewDownloader-Windows.exe
-    macOS:   dist/FlyKrewDownloader-macOS.dmg
+    Windows: dist/FlyKrewDownloader.exe
+    macOS:   dist/FlyKrewDownloader.dmg
 
 Requirements:
     pip install pyinstaller
@@ -223,18 +223,15 @@ def create_release_asset() -> Path:
         if not exe.exists():
             print(f"ERROR: {exe} does not exist. Build failed?")
             sys.exit(1)
-        asset = DIST / f"{APP_NAME}-Windows.exe"
-        if asset.exists():
-            asset.unlink()
-        shutil.copy2(exe, asset)
-        return asset
+        # For Windows, the PyInstaller output already is the intended shareable file.
+        return exe
 
     if IS_MAC:
         app = DIST / f"{APP_NAME}.app"
         if not app.exists():
             print(f"ERROR: {app} does not exist. Build failed?")
             sys.exit(1)
-        dmg = DIST / f"{APP_NAME}-macOS.dmg"
+        dmg = DIST / f"{APP_NAME}.dmg"
         if dmg.exists():
             dmg.unlink()
         # Create a simple DMG containing the .app bundle (no unzip required)
