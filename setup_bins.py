@@ -34,6 +34,13 @@ _FFMPEG_URLS: dict[str, str] = {
     ),
 }
 
+# ffprobe is needed by yt-dlp for MP3 postprocessing. The Windows/Linux ffmpeg
+# bundles already include ffprobe, but on macOS we have to fetch it separately.
+_FFPROBE_URLS: dict[str, str] = {
+    "Darwin-x64": "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip",
+    "Darwin-arm64": "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip",
+}
+
 
 def _platform_key() -> str:
     system = platform.system()          # Windows | Darwin | Linux
@@ -114,7 +121,40 @@ def download_ffmpeg() -> None:
         print("Please download ffmpeg manually and place it in the bin/ folder.")
 
 
+def download_ffprobe() -> None:
+    """Download ffprobe separately on macOS (Windows/Linux bundles already include it)."""
+    key = _platform_key()
+    url = _FFPROBE_URLS.get(key)
+    if not url:
+        return  # ffprobe came bundled with ffmpeg on this platform
+
+    dest_path = BIN_DIR / "ffprobe"
+    if dest_path.exists():
+        print("ffprobe already exists in bin/ — skipping download.")
+        return
+
+    print(f"Downloading ffprobe for {key}...")
+    archive_path = BIN_DIR / "ffprobe.zip"
+    _download(url, archive_path)
+    print("Extracting...")
+    with zipfile.ZipFile(archive_path, "r") as zf:
+        for name in zf.namelist():
+            basename = name.rsplit("/", 1)[-1]
+            if basename == "ffprobe":
+                with zf.open(name) as src, open(dest_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                break
+    archive_path.unlink(missing_ok=True)
+
+    if dest_path.exists():
+        dest_path.chmod(dest_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+        print("ffprobe ready!")
+    else:
+        print("ERROR: ffprobe binary not found after extraction.")
+
+
 if __name__ == "__main__":
     BIN_DIR.mkdir(exist_ok=True)
     download_ffmpeg()
+    download_ffprobe()
     print("\nSetup complete! Now run: pip install -r requirements.txt")

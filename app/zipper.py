@@ -30,24 +30,9 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
 
 
 def format_track_filename(track: TrackInfo) -> str:
-	"""Format track as: '01 - Artist - Title.mp3'
+	"""Use the original downloaded filename as-is."""
 
-	Falls back to '01 - Title.mp3' if artist is empty/unknown.
-	"""
-
-	index_str = f"{track.index:02d}"
-	artist = (track.artist or "").strip()
-	title = (track.title or "").strip()
-
-	if not title:
-		title = "Track"
-
-	if not artist or artist.lower() == "unknown":
-		base = f"{index_str} - {title}.mp3"
-	else:
-		base = f"{index_str} - {artist} - {title}.mp3"
-
-	return sanitize_filename(base, max_length=MAX_FILENAME_LENGTH)
+	return track.file_path.name
 
 
 def create_playlist_zip(tracks: list[TrackInfo], playlist_title: str, output_path: Path) -> Path:
