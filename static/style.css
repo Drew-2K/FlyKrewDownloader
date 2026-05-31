@@ -129,10 +129,96 @@ body {
 	border-color: var(--accent);
 }
 
+.input-row {
+	display: flex;
+	gap: 8px;
+	align-items: stretch;
+}
+
+.input-row .input {
+	flex: 1;
+}
+
+.icon-btn {
+	flex: 0 0 auto;
+	padding: 10px 12px;
+}
+
 .actions {
 	display: flex;
 	gap: 10px;
 	margin-top: 12px;
+	flex-wrap: wrap;
+}
+
+/* Options row (checkboxes) */
+.options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 14px;
+	margin-top: 14px;
+}
+
+.opt {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	color: #6e6e73;
+	font-size: 13px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.opt input {
+	accent-color: var(--accent);
+	width: 16px;
+	height: 16px;
+	cursor: pointer;
+}
+
+.opt-hint {
+	color: #9a9aa0;
+}
+
+/* Queue */
+.queue {
+	margin-top: 16px;
+}
+
+.queue-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.queue-url {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.remove-btn {
+	flex: 0 0 auto;
+	border: 0;
+	background: transparent;
+	color: #d32f2f;
+	font-size: 14px;
+	cursor: pointer;
+	padding: 2px 6px;
+	border-radius: 6px;
+}
+
+.remove-btn:hover {
+	background: rgba(211, 47, 47, 0.1);
+}
+
+/* Queue progress line */
+.queue-progress {
+	margin-top: 8px;
+	color: var(--accent);
+	font-size: 12px;
+	font-weight: 600;
 }
 
 .button {
