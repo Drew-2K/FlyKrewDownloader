@@ -15,13 +15,26 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.config import DOWNLOADS_DIR, FFMPEG_PATH, HOST, PORT, STATIC_DIR
+from app.config import DOWNLOADS_DIR, FEATURES, FFMPEG_PATH, HOST, PORT, STATIC_DIR
 from app.downloader import PlaylistDownloader
 from app.zipper import create_playlist_zip
 
 
-SOUNDCLOUD_PLAYLIST_PATTERN = r"https?://soundcloud\.com/[\w-]+/sets/[\w-]+"
+# Accept SoundCloud and YouTube — tracks, playlists/sets, albums, and shortlinks.
+SOUNDCLOUD_URL_PATTERN = r"https?://([\w-]+\.)*soundcloud\.com/.+"
 SOUNDCLOUD_SHORTLINK_PATTERN = r"https?://on\.soundcloud\.com/[\w-]+"
+YOUTUBE_URL_PATTERN = r"https?://([\w-]+\.)*(youtube\.com|youtu\.be)/.+"
+
+
+def _is_supported_url(url: str) -> bool:
+	"""True for SoundCloud or YouTube track/playlist URLs we can download."""
+	if not url:
+		return False
+	return bool(
+		re.match(SOUNDCLOUD_URL_PATTERN, url)
+		or re.match(SOUNDCLOUD_SHORTLINK_PATTERN, url)
+		or re.match(YOUTUBE_URL_PATTERN, url)
+	)
 
 
 def _resolve_soundcloud_url(url: str) -> str:
@@ -43,6 +56,7 @@ def _resolve_soundcloud_url(url: str) -> str:
 
 class DownloadRequest(BaseModel):
 	url: str
+	number_tracks: bool = False
 
 
 class DownloadResponse(BaseModel):
@@ -77,6 +91,7 @@ class Job:
 	zip_path: Path | None = None
 	created_at: datetime = field(default_factory=datetime.now)
 	cancel_requested: bool = False
+	number_tracks: bool = False
 
 
 jobs: dict[str, Job] = {}
@@ -109,6 +124,12 @@ async def ping():
 	"""Heartbeat endpoint used by the UI to keep the app alive while open."""
 	touch_activity()
 	return {"ok": True}
+
+
+@app.get("/api/features")
+async def features():
+	"""Expose feature flags so the UI can show/hide optional features."""
+	return FEATURES
 
 
 @app.on_event("startup")
@@ -160,8 +181,11 @@ def _job_status_model(job: Job) -> JobStatus:
 async def start_download(request: DownloadRequest, background_tasks: BackgroundTasks):
 	url = (request.url or "").strip()
 
-	if not (re.match(SOUNDCLOUD_PLAYLIST_PATTERN, url) or re.match(SOUNDCLOUD_SHORTLINK_PATTERN, url)):
-		raise HTTPException(status_code=400, detail="Invalid SoundCloud playlist URL")
+	if not _is_supported_url(url):
+		raise HTTPException(
+			status_code=400,
+			detail="Enter a SoundCloud or YouTube track or playlist URL",
+		)
 
 	if not FFMPEG_PATH.exists():
 		raise HTTPException(
@@ -173,14 +197,17 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
 	try:
 		url = await loop.run_in_executor(None, _resolve_soundcloud_url, url)
 	except Exception:
-		raise HTTPException(status_code=400, detail="Invalid SoundCloud playlist URL")
+		raise HTTPException(status_code=400, detail="Could not open that link — check the URL and try again.")
 
-	if not re.match(SOUNDCLOUD_PLAYLIST_PATTERN, url or ""):
-		raise HTTPException(status_code=400, detail="Invalid SoundCloud playlist URL")
+	if not _is_supported_url(url):
+		raise HTTPException(
+			status_code=400,
+			detail="Enter a SoundCloud or YouTube track or playlist URL",
+		)
 
 	job_id = str(uuid.uuid4())
 	touch_activity()
-	job = Job(id=job_id, url=url)
+	job = Job(id=job_id, url=url, number_tracks=bool(request.number_tracks))
 	jobs[job_id] = job
 
 	job_dir = DOWNLOADS_DIR / job_id
@@ -193,8 +220,8 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
 	except Exception as e:
 		msg = str(e)
 		if "private" in msg.lower():
-			raise HTTPException(status_code=404, detail="Playlist is private")
-		raise HTTPException(status_code=404, detail="Playlist not found")
+			raise HTTPException(status_code=404, detail="This track or playlist is private")
+		raise HTTPException(status_code=404, detail="Track or playlist not found")
 
 	job.playlist_title = info.title
 	job.total_tracks = info.track_count
@@ -232,7 +259,12 @@ async def process_download(job_id: str):
 		job.status = "zipping"
 		touch_activity()
 		job.current_track = None
-		zip_path = create_playlist_zip(result.tracks, job.playlist_title or "playlist", job_dir)
+		zip_path = create_playlist_zip(
+			result.tracks,
+			job.playlist_title or "playlist",
+			job_dir,
+			number_tracks=job.number_tracks,
+		)
 		job.zip_path = zip_path
 		touch_activity()
 

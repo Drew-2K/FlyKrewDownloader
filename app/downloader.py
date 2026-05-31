@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +34,43 @@ class PlaylistInfo:
 	track_count: int
 	uploader: str
 	url: str
+
+
+# Separators commonly used in "Artist - Title" track names.
+_TITLE_SEPARATORS = (" - ", " – ", " — ", " | ")
+
+
+def parse_artist_title(info: dict) -> tuple[str, str]:
+	"""Derive a clean (artist, title) pair from a yt-dlp info dict.
+
+	Priority:
+	  1. Explicit ``artist``/``track`` metadata when yt-dlp provides it.
+	  2. Splitting a "Artist - Title" style title (common on YouTube). This
+	     avoids "Channel - Artist - Title" duplication from the uploader.
+	  3. Falling back to ``uploader`` as the artist (typical for SoundCloud,
+	     where the title is just the track name).
+	"""
+
+	full_title = (info.get("title") or "").strip()
+	explicit_track = (info.get("track") or "").strip()
+	explicit_artist = (info.get("artist") or info.get("creator") or "").strip()
+
+	if explicit_artist and explicit_track:
+		return explicit_artist, explicit_track
+
+	title = explicit_track or full_title
+	artist = explicit_artist or (info.get("uploader") or "").strip()
+
+	# When the title itself looks like "Artist - Title", trust that split.
+	if not explicit_track:
+		for sep in _TITLE_SEPARATORS:
+			if sep in full_title:
+				left, right = full_title.split(sep, 1)
+				left, right = left.strip(), right.strip()
+				if left and right:
+					return left, right
+
+	return artist, title
 
 
 class PlaylistDownloader:
@@ -91,6 +129,49 @@ class PlaylistDownloader:
 		ydl_opts["progress_hooks"] = [progress_hook]
 		return ydl_opts
 
+	def _ensure_mp3(self, file_path: str | Path) -> Path:
+		"""Guarantee the track is a real MP3 so it plays on CDJs.
+
+		yt-dlp's FFmpegExtractAudio normally produces the .mp3, but when its
+		postprocessing is skipped or fails (ffprobe missing, or the source is
+		Opus/AAC inside an .m4a/.webm container) it leaves the original file
+		behind. Pioneer CDJs frequently reject those files with "file type not
+		supported", so we transcode anything that isn't already an MP3 with a
+		direct ffmpeg call. ffmpeg alone does not need ffprobe, so this also
+		recovers the case where ffprobe is unavailable.
+		"""
+
+		path = Path(file_path)
+		if path.suffix.lower() == ".mp3":
+			return path
+
+		# yt-dlp may have already written the .mp3 alongside the source.
+		sibling_mp3 = path.with_suffix(".mp3")
+		if sibling_mp3.exists():
+			return sibling_mp3
+
+		if not path.exists():
+			raise RuntimeError(f"Downloaded file is missing: {path}")
+
+		converted = path.with_suffix(".mp3")
+		cmd = [
+			str(FFMPEG_PATH),
+			"-y",
+			"-i", str(path),
+			"-vn",                       # drop any embedded cover video stream
+			"-c:a", "libmp3lame",
+			"-b:a", "192k",
+			str(converted),
+		]
+		proc = subprocess.run(cmd, capture_output=True, text=True)
+		if proc.returncode != 0 or not converted.exists():
+			stderr = (proc.stderr or "").strip()[-300:]
+			raise RuntimeError(f"Failed to convert {path.name} to MP3: {stderr}")
+
+		# Remove the non-MP3 original so it never ends up in the ZIP.
+		path.unlink(missing_ok=True)
+		return converted
+
 	def get_playlist_info(self, url: str) -> PlaylistInfo:
 		"""Extract playlist metadata without downloading.
 
@@ -105,8 +186,12 @@ class PlaylistDownloader:
 		with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 			info = ydl.extract_info(url, download=False)
 
-		entries = info.get("entries") or []
-		track_count = sum(1 for e in entries if e)
+		# A playlist/set/album has "entries"; a single track does not.
+		entries = info.get("entries")
+		if entries is None:
+			track_count = 1
+		else:
+			track_count = sum(1 for e in entries if e)
 
 		return PlaylistInfo(
 			title=info.get("title") or "",
@@ -141,7 +226,12 @@ class PlaylistDownloader:
 
 		playlist_info = await loop.run_in_executor(self._executor, extract_playlist_sync)
 		playlist_title = playlist_info.get("title") or ""
-		entries = playlist_info.get("entries") or []
+
+		# A single track has no "entries" — treat it as a one-item playlist so
+		# the same download path works for both playlists and lone tracks.
+		entries = playlist_info.get("entries")
+		if entries is None:
+			entries = [playlist_info]
 		total_tracks = sum(1 for e in entries if e)
 
 		tracks: list[TrackInfo] = []
@@ -160,7 +250,10 @@ class PlaylistDownloader:
 			artist = entry.get("uploader") or entry.get("artist") or ""
 			duration = entry.get("duration") or 0
 
-			track_url = entry.get("url") or entry.get("webpage_url")
+			# Prefer the page URL so re-downloading works for both playlist
+			# entries and a single fully-extracted track (whose "url" is a
+			# direct media/format URL rather than the page).
+			track_url = entry.get("webpage_url") or entry.get("url")
 			if not track_url:
 				errors.append(
 					{
@@ -197,16 +290,18 @@ class PlaylistDownloader:
 				if not file_path:
 					raise RuntimeError("Could not determine downloaded file path")
 
-				mp3_path = Path(file_path)
-				if mp3_path.suffix.lower() != ".mp3":
-					candidate_mp3 = mp3_path.with_suffix(".mp3")
-					if candidate_mp3.exists():
-						mp3_path = candidate_mp3
+				# Guarantee a CDJ-compatible MP3 even if yt-dlp's postprocessor
+				# left an .m4a/.opus behind (otherwise CDJs reject the file).
+				mp3_path = self._ensure_mp3(file_path)
+
+				# Derive a clean "Artist - Title" from the full track metadata
+				# so the file is named usefully instead of by its URL slug.
+				parsed_artist, parsed_title = parse_artist_title(track_result)
 
 				track_info = TrackInfo(
 					index=int(playlist_index),
-					title=title or track_result.get("title"),
-					artist=artist or track_result.get("uploader"),
+					title=parsed_title or title or track_result.get("title") or "",
+					artist=parsed_artist or artist or "",
 					duration=int(duration or track_result.get("duration") or 0),
 					file_path=mp3_path,
 				)

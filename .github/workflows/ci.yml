@@ -1,0 +1,38 @@
+# Lightweight checks on every PR / push: compile, unit tests, and inline-JS syntax.
+# (The build.yml workflow only runs on release tags, so this gives PRs a green check.)
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install fastapi httpx pytest
+
+      - name: Compile sources
+        run: python -m compileall app
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Check inline JS syntax
+        run: node scripts/check_js.js

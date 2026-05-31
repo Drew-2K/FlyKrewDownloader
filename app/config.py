@@ -60,3 +60,21 @@ MAX_FILENAME_LENGTH = 200  # safe limit on all platforms
 # Server settings
 HOST = "127.0.0.1"
 PORT = 8000
+
+
+# ---------------------------------------------------------------------------
+# Feature flags — flip any of these to False to instantly hide/disable a
+# feature in the UI without touching code. The frontend reads them from
+# /api/features on load. This is the easy "kill switch" for anything that
+# doesn't earn its keep.
+# ---------------------------------------------------------------------------
+FEATURES: dict[str, bool] = {
+	# Queue several URLs and download them one after another.
+	"multi_url_queue": True,
+	# Checkbox to prefix filenames with track number ("01 - Artist - Title").
+	"number_tracks_toggle": True,
+	# Checkbox to turn the background animations on/off.
+	"animations_toggle": True,
+	# Keep a "Download ZIP again" button after a job completes.
+	"redownload_button": True,
+}

@@ -29,13 +29,46 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
 	return cleaned
 
 
-def format_track_filename(track: TrackInfo) -> str:
-	"""Use the original downloaded filename as-is."""
+def format_track_filename(track: TrackInfo, number: bool = False) -> str:
+	"""Name the file 'Artist - Title.mp3' (optionally '01 - Artist - Title.mp3').
 
-	return track.file_path.name
+	The name is built ONLY from this track's own metadata. It never falls back
+	to a playlist-level name, so a whole playlist can't end up as a pile of
+	"playlist.mp3" files. If per-track metadata is missing we use the file's
+	own stem, and only as a last resort 'Track NN'.
+
+	Falls back to just the title when the artist is unknown or already
+	contained in the title (avoids "Artist - Artist - Title").
+	"""
+
+	artist = (track.artist or "").strip()
+	title = (track.title or "").strip()
+	suffix = track.file_path.suffix or ".mp3"
+
+	if not title:
+		# Per-track fallback: the on-disk stem, then a numbered placeholder.
+		stem = (track.file_path.stem or "").strip(" .")
+		title = stem or f"Track {track.index:02d}"
+
+	if artist and artist.lower() not in title.lower():
+		base = f"{artist} - {title}"
+	else:
+		base = title
+
+	if number:
+		base = f"{track.index:02d} - {base}"
+
+	cleaned = sanitize_filename(f"{base}{suffix}", max_length=MAX_FILENAME_LENGTH)
+	# Guarantee a usable, non-empty name no matter what.
+	return cleaned or f"{track.index:02d} - Track{suffix}"
 
 
-def create_playlist_zip(tracks: list[TrackInfo], playlist_title: str, output_path: Path) -> Path:
+def create_playlist_zip(
+	tracks: list[TrackInfo],
+	playlist_title: str,
+	output_path: Path,
+	number_tracks: bool = False,
+) -> Path:
 	"""Create a ZIP file containing all MP3s with numbered filenames.
 
 	Args:
@@ -80,7 +113,7 @@ def create_playlist_zip(tracks: list[TrackInfo], playlist_title: str, output_pat
 		buffer = BytesIO()
 		with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
 			for track in tracks:
-				arcname = unique_zip_name(format_track_filename(track))
+				arcname = unique_zip_name(format_track_filename(track, number=number_tracks))
 				zf.write(track.file_path, arcname=arcname)
 
 		zip_path.write_bytes(buffer.getvalue())
@@ -88,7 +121,7 @@ def create_playlist_zip(tracks: list[TrackInfo], playlist_title: str, output_pat
 
 	with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
 		for track in tracks:
-			arcname = unique_zip_name(format_track_filename(track))
+			arcname = unique_zip_name(format_track_filename(track, number=number_tracks))
 			zf.write(track.file_path, arcname=arcname)
 
 	return zip_path
