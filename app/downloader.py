@@ -36,6 +36,43 @@ class PlaylistInfo:
 	url: str
 
 
+# Separators commonly used in "Artist - Title" track names.
+_TITLE_SEPARATORS = (" - ", " – ", " — ", " | ")
+
+
+def parse_artist_title(info: dict) -> tuple[str, str]:
+	"""Derive a clean (artist, title) pair from a yt-dlp info dict.
+
+	Priority:
+	  1. Explicit ``artist``/``track`` metadata when yt-dlp provides it.
+	  2. Splitting a "Artist - Title" style title (common on YouTube). This
+	     avoids "Channel - Artist - Title" duplication from the uploader.
+	  3. Falling back to ``uploader`` as the artist (typical for SoundCloud,
+	     where the title is just the track name).
+	"""
+
+	full_title = (info.get("title") or "").strip()
+	explicit_track = (info.get("track") or "").strip()
+	explicit_artist = (info.get("artist") or info.get("creator") or "").strip()
+
+	if explicit_artist and explicit_track:
+		return explicit_artist, explicit_track
+
+	title = explicit_track or full_title
+	artist = explicit_artist or (info.get("uploader") or "").strip()
+
+	# When the title itself looks like "Artist - Title", trust that split.
+	if not explicit_track:
+		for sep in _TITLE_SEPARATORS:
+			if sep in full_title:
+				left, right = full_title.split(sep, 1)
+				left, right = left.strip(), right.strip()
+				if left and right:
+					return left, right
+
+	return artist, title
+
+
 class PlaylistDownloader:
 	"""Downloads SoundCloud playlists using yt-dlp."""
 
@@ -149,8 +186,12 @@ class PlaylistDownloader:
 		with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 			info = ydl.extract_info(url, download=False)
 
-		entries = info.get("entries") or []
-		track_count = sum(1 for e in entries if e)
+		# A playlist/set/album has "entries"; a single track does not.
+		entries = info.get("entries")
+		if entries is None:
+			track_count = 1
+		else:
+			track_count = sum(1 for e in entries if e)
 
 		return PlaylistInfo(
 			title=info.get("title") or "",
@@ -185,7 +226,12 @@ class PlaylistDownloader:
 
 		playlist_info = await loop.run_in_executor(self._executor, extract_playlist_sync)
 		playlist_title = playlist_info.get("title") or ""
-		entries = playlist_info.get("entries") or []
+
+		# A single track has no "entries" — treat it as a one-item playlist so
+		# the same download path works for both playlists and lone tracks.
+		entries = playlist_info.get("entries")
+		if entries is None:
+			entries = [playlist_info]
 		total_tracks = sum(1 for e in entries if e)
 
 		tracks: list[TrackInfo] = []
@@ -204,7 +250,10 @@ class PlaylistDownloader:
 			artist = entry.get("uploader") or entry.get("artist") or ""
 			duration = entry.get("duration") or 0
 
-			track_url = entry.get("url") or entry.get("webpage_url")
+			# Prefer the page URL so re-downloading works for both playlist
+			# entries and a single fully-extracted track (whose "url" is a
+			# direct media/format URL rather than the page).
+			track_url = entry.get("webpage_url") or entry.get("url")
 			if not track_url:
 				errors.append(
 					{
@@ -245,10 +294,14 @@ class PlaylistDownloader:
 				# left an .m4a/.opus behind (otherwise CDJs reject the file).
 				mp3_path = self._ensure_mp3(file_path)
 
+				# Derive a clean "Artist - Title" from the full track metadata
+				# so the file is named usefully instead of by its URL slug.
+				parsed_artist, parsed_title = parse_artist_title(track_result)
+
 				track_info = TrackInfo(
 					index=int(playlist_index),
-					title=title or track_result.get("title"),
-					artist=artist or track_result.get("uploader"),
+					title=parsed_title or title or track_result.get("title") or "",
+					artist=parsed_artist or artist or "",
 					duration=int(duration or track_result.get("duration") or 0),
 					file_path=mp3_path,
 				)

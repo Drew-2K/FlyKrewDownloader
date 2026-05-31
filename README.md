@@ -1,6 +1,7 @@
 # Fly Krew Downloader
 
-Download SoundCloud playlists as a ZIP of MP3 files.
+Download SoundCloud or YouTube playlists — or single tracks — as a ZIP of MP3
+files, named `Artist - Title.mp3`.
 
 ---
 
@@ -71,7 +72,8 @@ Produces:
 ## Limitations
 
 - **Single-user only** — not designed for shared hosting
-- Public playlists only (private requires authentication)
-- Maximum quality: 128kbps MP3 (SoundCloud's streaming limit)
+- Accepts SoundCloud and YouTube links — playlists/sets/albums or single tracks
+- Public content only (private requires authentication)
+- Quality is capped by the source stream (e.g. 128kbps for SoundCloud streaming)
 - Large playlists (100+ tracks) may take several minutes
 - Server restart clears all in-progress jobs

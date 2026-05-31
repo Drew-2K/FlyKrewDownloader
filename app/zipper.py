@@ -30,9 +30,27 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
 
 
 def format_track_filename(track: TrackInfo) -> str:
-	"""Use the original downloaded filename as-is."""
+	"""Name the file 'Artist - Title.mp3'.
 
-	return track.file_path.name
+	Falls back to just the title when the artist is unknown or already
+	contained in the title (avoids "Artist - Artist - Title"). If neither is
+	available, keep the original downloaded filename.
+	"""
+
+	artist = (track.artist or "").strip()
+	title = (track.title or "").strip()
+	suffix = track.file_path.suffix or ".mp3"
+
+	if not title:
+		# No usable metadata — keep whatever yt-dlp produced.
+		return track.file_path.name
+
+	if artist and artist.lower() not in title.lower():
+		base = f"{artist} - {title}{suffix}"
+	else:
+		base = f"{title}{suffix}"
+
+	return sanitize_filename(base, max_length=MAX_FILENAME_LENGTH)
 
 
 def create_playlist_zip(tracks: list[TrackInfo], playlist_title: str, output_path: Path) -> Path:

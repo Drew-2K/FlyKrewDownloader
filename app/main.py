@@ -20,8 +20,21 @@ from app.downloader import PlaylistDownloader
 from app.zipper import create_playlist_zip
 
 
-SOUNDCLOUD_PLAYLIST_PATTERN = r"https?://soundcloud\.com/[\w-]+/sets/[\w-]+"
+# Accept SoundCloud and YouTube — tracks, playlists/sets, albums, and shortlinks.
+SOUNDCLOUD_URL_PATTERN = r"https?://([\w-]+\.)*soundcloud\.com/.+"
 SOUNDCLOUD_SHORTLINK_PATTERN = r"https?://on\.soundcloud\.com/[\w-]+"
+YOUTUBE_URL_PATTERN = r"https?://([\w-]+\.)*(youtube\.com|youtu\.be)/.+"
+
+
+def _is_supported_url(url: str) -> bool:
+	"""True for SoundCloud or YouTube track/playlist URLs we can download."""
+	if not url:
+		return False
+	return bool(
+		re.match(SOUNDCLOUD_URL_PATTERN, url)
+		or re.match(SOUNDCLOUD_SHORTLINK_PATTERN, url)
+		or re.match(YOUTUBE_URL_PATTERN, url)
+	)
 
 
 def _resolve_soundcloud_url(url: str) -> str:
@@ -160,8 +173,11 @@ def _job_status_model(job: Job) -> JobStatus:
 async def start_download(request: DownloadRequest, background_tasks: BackgroundTasks):
 	url = (request.url or "").strip()
 
-	if not (re.match(SOUNDCLOUD_PLAYLIST_PATTERN, url) or re.match(SOUNDCLOUD_SHORTLINK_PATTERN, url)):
-		raise HTTPException(status_code=400, detail="Invalid SoundCloud playlist URL")
+	if not _is_supported_url(url):
+		raise HTTPException(
+			status_code=400,
+			detail="Enter a SoundCloud or YouTube track or playlist URL",
+		)
 
 	if not FFMPEG_PATH.exists():
 		raise HTTPException(
@@ -173,10 +189,13 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
 	try:
 		url = await loop.run_in_executor(None, _resolve_soundcloud_url, url)
 	except Exception:
-		raise HTTPException(status_code=400, detail="Invalid SoundCloud playlist URL")
+		raise HTTPException(status_code=400, detail="Could not open that link — check the URL and try again.")
 
-	if not re.match(SOUNDCLOUD_PLAYLIST_PATTERN, url or ""):
-		raise HTTPException(status_code=400, detail="Invalid SoundCloud playlist URL")
+	if not _is_supported_url(url):
+		raise HTTPException(
+			status_code=400,
+			detail="Enter a SoundCloud or YouTube track or playlist URL",
+		)
 
 	job_id = str(uuid.uuid4())
 	touch_activity()
@@ -193,8 +212,8 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
 	except Exception as e:
 		msg = str(e)
 		if "private" in msg.lower():
-			raise HTTPException(status_code=404, detail="Playlist is private")
-		raise HTTPException(status_code=404, detail="Playlist not found")
+			raise HTTPException(status_code=404, detail="This track or playlist is private")
+		raise HTTPException(status_code=404, detail="Track or playlist not found")
 
 	job.playlist_title = info.title
 	job.total_tracks = info.track_count

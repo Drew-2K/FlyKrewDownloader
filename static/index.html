@@ -18,12 +18,12 @@
           <p class="subtitle">Rip it baby 🪩</p>
 				</header>
 				<div class="form">
-					<label class="label" for="url-input">SoundCloud playlist URL</label>
+					<label class="label" for="url-input">SoundCloud or YouTube URL (track or playlist)</label>
 					<input
 						id="url-input"
 						class="input"
 						type="text"
-						placeholder="https://soundcloud.com/username/sets/playlist"
+						placeholder="SoundCloud or YouTube track / playlist URL"
 						autocomplete="off"
 						inputmode="url"
 					/>
@@ -71,7 +71,7 @@
 			let hasTriggeredDownload = false;
 			let heartbeatInterval = null;
 
-			const URL_PATTERN = /^(https?:\/\/soundcloud\.com\/[\w-]+\/sets\/[\w-]+|https?:\/\/on\.soundcloud\.com\/[\w-]+)/;
+			const URL_PATTERN = /^(https?:\/\/([\w-]+\.)*soundcloud\.com\/.+|https?:\/\/on\.soundcloud\.com\/[\w-]+|https?:\/\/([\w-]+\.)*(youtube\.com|youtu\.be)\/.+)/;
 
 			function setError(message) {
 				const el = document.getElementById('error');
@@ -307,7 +307,7 @@
 				hasTriggeredDownload = false;
 
 				if (!URL_PATTERN.test(url)) {
-					setError('Please enter a valid SoundCloud playlist URL.');
+					setError('Please enter a valid SoundCloud or YouTube track or playlist URL.');
 					return;
 				}
 
