@@ -69,6 +69,26 @@ Produces:
 
 ---
 
+## Turning features on/off
+
+Every optional feature has a kill switch in `app/config.py` under `FEATURES`.
+Flip a value to `False` and that feature disappears from the UI on next launch —
+no code changes needed:
+
+```python
+FEATURES = {
+    "multi_url_queue": True,       # queue several links and download in sequence
+    "number_tracks_toggle": True,  # "01 - Artist - Title" numbering checkbox
+    "animations_toggle": True,     # background-animations on/off checkbox
+    "redownload_button": True,     # "Download ZIP again" button
+}
+```
+
+To remove a feature entirely, each was committed on its own, so
+`git revert <commit>` rolls back just that one. See `git log` for the hashes.
+
+---
+
 ## Limitations
 
 - **Single-user only** — not designed for shared hosting
