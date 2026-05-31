@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,6 +91,49 @@ class PlaylistDownloader:
 
 		ydl_opts["progress_hooks"] = [progress_hook]
 		return ydl_opts
+
+	def _ensure_mp3(self, file_path: str | Path) -> Path:
+		"""Guarantee the track is a real MP3 so it plays on CDJs.
+
+		yt-dlp's FFmpegExtractAudio normally produces the .mp3, but when its
+		postprocessing is skipped or fails (ffprobe missing, or the source is
+		Opus/AAC inside an .m4a/.webm container) it leaves the original file
+		behind. Pioneer CDJs frequently reject those files with "file type not
+		supported", so we transcode anything that isn't already an MP3 with a
+		direct ffmpeg call. ffmpeg alone does not need ffprobe, so this also
+		recovers the case where ffprobe is unavailable.
+		"""
+
+		path = Path(file_path)
+		if path.suffix.lower() == ".mp3":
+			return path
+
+		# yt-dlp may have already written the .mp3 alongside the source.
+		sibling_mp3 = path.with_suffix(".mp3")
+		if sibling_mp3.exists():
+			return sibling_mp3
+
+		if not path.exists():
+			raise RuntimeError(f"Downloaded file is missing: {path}")
+
+		converted = path.with_suffix(".mp3")
+		cmd = [
+			str(FFMPEG_PATH),
+			"-y",
+			"-i", str(path),
+			"-vn",                       # drop any embedded cover video stream
+			"-c:a", "libmp3lame",
+			"-b:a", "192k",
+			str(converted),
+		]
+		proc = subprocess.run(cmd, capture_output=True, text=True)
+		if proc.returncode != 0 or not converted.exists():
+			stderr = (proc.stderr or "").strip()[-300:]
+			raise RuntimeError(f"Failed to convert {path.name} to MP3: {stderr}")
+
+		# Remove the non-MP3 original so it never ends up in the ZIP.
+		path.unlink(missing_ok=True)
+		return converted
 
 	def get_playlist_info(self, url: str) -> PlaylistInfo:
 		"""Extract playlist metadata without downloading.
@@ -197,11 +241,9 @@ class PlaylistDownloader:
 				if not file_path:
 					raise RuntimeError("Could not determine downloaded file path")
 
-				mp3_path = Path(file_path)
-				if mp3_path.suffix.lower() != ".mp3":
-					candidate_mp3 = mp3_path.with_suffix(".mp3")
-					if candidate_mp3.exists():
-						mp3_path = candidate_mp3
+				# Guarantee a CDJ-compatible MP3 even if yt-dlp's postprocessor
+				# left an .m4a/.opus behind (otherwise CDJs reject the file).
+				mp3_path = self._ensure_mp3(file_path)
 
 				track_info = TrackInfo(
 					index=int(playlist_index),
