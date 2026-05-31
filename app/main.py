@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.config import DOWNLOADS_DIR, FFMPEG_PATH, HOST, PORT, STATIC_DIR
+from app.config import DOWNLOADS_DIR, FEATURES, FFMPEG_PATH, HOST, PORT, STATIC_DIR
 from app.downloader import PlaylistDownloader
 from app.zipper import create_playlist_zip
 
@@ -56,6 +56,7 @@ def _resolve_soundcloud_url(url: str) -> str:
 
 class DownloadRequest(BaseModel):
 	url: str
+	number_tracks: bool = False
 
 
 class DownloadResponse(BaseModel):
@@ -90,6 +91,7 @@ class Job:
 	zip_path: Path | None = None
 	created_at: datetime = field(default_factory=datetime.now)
 	cancel_requested: bool = False
+	number_tracks: bool = False
 
 
 jobs: dict[str, Job] = {}
@@ -122,6 +124,12 @@ async def ping():
 	"""Heartbeat endpoint used by the UI to keep the app alive while open."""
 	touch_activity()
 	return {"ok": True}
+
+
+@app.get("/api/features")
+async def features():
+	"""Expose feature flags so the UI can show/hide optional features."""
+	return FEATURES
 
 
 @app.on_event("startup")
@@ -199,7 +207,7 @@ async def start_download(request: DownloadRequest, background_tasks: BackgroundT
 
 	job_id = str(uuid.uuid4())
 	touch_activity()
-	job = Job(id=job_id, url=url)
+	job = Job(id=job_id, url=url, number_tracks=bool(request.number_tracks))
 	jobs[job_id] = job
 
 	job_dir = DOWNLOADS_DIR / job_id
@@ -251,7 +259,12 @@ async def process_download(job_id: str):
 		job.status = "zipping"
 		touch_activity()
 		job.current_track = None
-		zip_path = create_playlist_zip(result.tracks, job.playlist_title or "playlist", job_dir)
+		zip_path = create_playlist_zip(
+			result.tracks,
+			job.playlist_title or "playlist",
+			job_dir,
+			number_tracks=job.number_tracks,
+		)
 		job.zip_path = zip_path
 		touch_activity()
 
