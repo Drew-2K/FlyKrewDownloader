@@ -152,12 +152,30 @@ def find_ffmpeg() -> Path | None:
     return None
 
 
+def find_ffprobe() -> Path | None:
+    """Locate the ffprobe binary that should be bundled (for MP3 postprocessing)."""
+    binary_name = "ffprobe.exe" if IS_WIN else "ffprobe"
+    bundled = ROOT / "bin" / binary_name
+    if bundled.exists():
+        return bundled
+
+    system = shutil.which("ffprobe")
+    if system:
+        return Path(system)
+
+    return None
+
+
 def run_pyinstaller() -> None:
     ffmpeg = find_ffmpeg()
     if not ffmpeg:
         print("ERROR: ffmpeg not found.")
         print("Run 'python setup_bins.py' first or install ffmpeg.")
         sys.exit(1)
+
+    ffprobe = find_ffprobe()
+    if not ffprobe:
+        print("WARNING: ffprobe not found — MP3 conversion will fail in the built app.")
 
     # Determine platform-specific ffmpeg dest inside the bundle
     ffmpeg_dest = "bin"  # will be placed at <bundle>/bin/ffmpeg[.exe]
@@ -173,6 +191,12 @@ def run_pyinstaller() -> None:
         "--add-data", f"{ROOT / 'static'}{os.pathsep}static",
         # Bundle ffmpeg binary
         "--add-data", f"{ffmpeg}{os.pathsep}{ffmpeg_dest}",
+    ]
+
+    if ffprobe:
+        cmd.extend(["--add-data", f"{ffprobe}{os.pathsep}{ffmpeg_dest}"])
+
+    cmd.extend([
         # Hidden imports that PyInstaller may miss
         "--hidden-import", "uvicorn.logging",
         "--hidden-import", "uvicorn.loops",
@@ -192,7 +216,7 @@ def run_pyinstaller() -> None:
         "--hidden-import", "app.zipper",
         # Collect all yt-dlp extractors (they're loaded dynamically)
         "--collect-all", "yt_dlp",
-    ]
+    ])
 
     icon_path = ensure_app_icon()
     if icon_path:

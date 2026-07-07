@@ -1,6 +1,7 @@
 # Fly Krew Downloader
 
-Download SoundCloud playlists as a ZIP of MP3 files.
+Download SoundCloud or YouTube playlists — or single tracks — as a ZIP of MP3
+files, named `Artist - Title.mp3`.
 
 ---
 
@@ -68,10 +69,31 @@ Produces:
 
 ---
 
+## Turning features on/off
+
+Every optional feature has a kill switch in `app/config.py` under `FEATURES`.
+Flip a value to `False` and that feature disappears from the UI on next launch —
+no code changes needed:
+
+```python
+FEATURES = {
+    "multi_url_queue": True,       # queue several links and download in sequence
+    "number_tracks_toggle": True,  # "01 - Artist - Title" numbering checkbox
+    "animations_toggle": True,     # background-animations on/off checkbox
+    "redownload_button": True,     # "Download ZIP again" button
+}
+```
+
+To remove a feature entirely, each was committed on its own, so
+`git revert <commit>` rolls back just that one. See `git log` for the hashes.
+
+---
+
 ## Limitations
 
 - **Single-user only** — not designed for shared hosting
-- Public playlists only (private requires authentication)
-- Maximum quality: 128kbps MP3 (SoundCloud's streaming limit)
+- Accepts SoundCloud and YouTube links — playlists/sets/albums or single tracks
+- Public content only (private requires authentication)
+- Quality is capped by the source stream (e.g. 128kbps for SoundCloud streaming)
 - Large playlists (100+ tracks) may take several minutes
 - Server restart clears all in-progress jobs
