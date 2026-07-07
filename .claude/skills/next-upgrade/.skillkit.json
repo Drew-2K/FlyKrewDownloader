@@ -1,0 +1,9 @@
+{
+  "name": "next-upgrade",
+  "description": "",
+  "source": "vercel-labs/next-skills",
+  "sourceType": "github",
+  "subpath": "next-upgrade",
+  "installedAt": "2026-04-01T03:38:57.155Z",
+  "enabled": true
+}
