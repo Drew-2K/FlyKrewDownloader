@@ -20,3 +20,4 @@ reliable for Drew's real use. Cosmetic churn is not valuable.
 
 ## Run Log
 2026-07-07 | Autopilot installed (pilot project) | —
+2026-07-07 | SUGGESTED: Keep the download engine fresh at runtime | The engine that actually grabs the audio (yt-dlp) is baked into the app when it's built and never changes after that. SoundCloud and YouTube tweak their sites every few weeks, and when they do, a frozen engine quietly stops working — friends who downloaded the app months ago suddenly get "download failed" with no fix except Drew rebuilding and re-releasing. Proposed task: on startup, quietly check for and load the latest engine into a writable folder, always falling back to the built-in one if offline or if the update looks broken (so the working download flow can never break). Rough size: one focused, well-tested change to how the app loads its engine. This is the single biggest reliability win for real-world use.
